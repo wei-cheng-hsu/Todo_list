@@ -1,8 +1,11 @@
 USE todo_db;
 
 CREATE TABLE IF NOT EXISTS todos (
-    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-
+    id CHAR(36)
+        CHARACTER SET ascii
+        COLLATE ascii_bin
+        NOT NULL
+        PRIMARY KEY,
     title VARCHAR(50) NOT NULL,
 
     description VARCHAR(1000),

@@ -1,18 +1,23 @@
 package service
 
 import (
+	"errors"
 	"time"
 
+	"github.com/google/uuid"
+
+	"todo-backend/internal/apperror"
 	"todo-backend/internal/model"
+	"todo-backend/internal/model/api"
 	"todo-backend/internal/repository"
 )
 
 type TodoService interface {
-	Create(req model.CreateTodoRequest) (*model.Todo, error)
+	Create(req api.CreateTodoRequest) (*model.Todo, error)
 	GetAll() ([]model.Todo, error)
-	Update(id uint64, req model.UpdateTodoRequest) error
-	Finish(id uint64) error
-	Delete(id uint64) error
+	Update(id uuid.UUID, req api.UpdateTodoRequest) error
+	Finish(id uuid.UUID) error
+	Delete(id uuid.UUID) error
 }
 
 // Service中持有一個Repository
@@ -61,7 +66,10 @@ func determineTodoStatus(
 func (s *todoService) GetAll() ([]model.Todo, error) {
 	todos, err := s.repository.GetAll()
 	if err != nil {
-		return nil, err
+		return nil, apperror.NewWithCode(
+			apperror.ErrTodoList,
+			err,
+		)
 	}
 
 	//把todos中每筆todo交由determineTodoStatus判斷status狀態
@@ -77,7 +85,10 @@ func (s *todoService) GetAll() ([]model.Todo, error) {
 				todos[i].ID,
 				newStatus,
 			); err != nil {
-				return nil, err
+				return nil, apperror.NewWithCode(
+					apperror.ErrTodoList,
+					err,
+				)
 			}
 			todos[i].Status = newStatus
 		}
@@ -89,10 +100,13 @@ func (s *todoService) GetAll() ([]model.Todo, error) {
 // Create 把新todo加入到資料庫中
 // 把Create()此method掛在todoService上
 // 回傳值: (*model.Todo, error)
-func (s *todoService) Create(req model.CreateTodoRequest) (*model.Todo, error) {
+func (s *todoService) Create(req api.CreateTodoRequest) (*model.Todo, error) {
 	dueDate, err := time.Parse("2006-01-02", req.DueDate) //把前端傳來的日期字串轉換成time.Time格式(給Todo使用並寫入資料庫)
 	if err != nil {
-		return nil, err
+		return nil, apperror.NewWithCode(
+			apperror.ErrTodoInvalidDate,
+			err,
+		)
 	}
 
 	status := determineTodoStatus(
@@ -110,17 +124,23 @@ func (s *todoService) Create(req model.CreateTodoRequest) (*model.Todo, error) {
 
 	// 傳給Repository寫入MySQL
 	if err := s.repository.Create(todo); err != nil {
-		return nil, err
+		return nil, apperror.NewWithCode(
+			apperror.ErrTodoCreate,
+			err,
+		)
 	}
 
 	return todo, nil
 }
 
 // Update 更新資料庫內該id的資料
-func (s *todoService) Update(id uint64, req model.UpdateTodoRequest) error {
+func (s *todoService) Update(id uuid.UUID, req api.UpdateTodoRequest) error {
 	dueDate, err := time.Parse("2006-01-02", req.DueDate)
 	if err != nil {
-		return err
+		return apperror.NewWithCode(
+			apperror.ErrTodoInvalidDate,
+			err,
+		)
 	}
 
 	todo := &model.Todo{
@@ -129,15 +149,56 @@ func (s *todoService) Update(id uint64, req model.UpdateTodoRequest) error {
 		DueDate:     dueDate,
 	}
 
-	return s.repository.Update(id, todo)
+	err = s.repository.Update(id, todo)
+
+	if errors.Is(err, repository.ErrTodoNotFound) {
+		return apperror.NewWithCode(
+			apperror.ErrTodoNotFound,
+			err,
+		)
+	}
+	if err != nil {
+		return apperror.NewWithCode(
+			apperror.ErrTodoUpdate,
+			err,
+		)
+	}
+	return nil
 }
 
 // Finish 更新指定id的todo status為finish
-func (s *todoService) Finish(id uint64) error {
-	return s.repository.Finish(id)
+func (s *todoService) Finish(id uuid.UUID) error {
+	err := s.repository.Finish(id)
+
+	if errors.Is(err, repository.ErrTodoNotFound) {
+		return apperror.NewWithCode(
+			apperror.ErrTodoNotFound,
+			err,
+		)
+	}
+	if err != nil {
+		return apperror.NewWithCode(
+			apperror.ErrTodoFinish,
+			err,
+		)
+	}
+	return nil
 }
 
 // Delete 刪除指定id的todo row
-func (s *todoService) Delete(id uint64) error {
-	return s.repository.Delete(id)
+func (s *todoService) Delete(id uuid.UUID) error {
+	err := s.repository.Delete(id)
+	if errors.Is(err, repository.ErrTodoNotFound) {
+		return apperror.NewWithCode(
+			apperror.ErrTodoNotFound,
+			err,
+		)
+	}
+	if err != nil {
+		return apperror.NewWithCode(
+			apperror.ErrTodoDelete,
+			err,
+		)
+	}
+	return nil
 }
