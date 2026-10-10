@@ -1,49 +1,38 @@
 package main
 
 import (
-	"database/sql"
-	"fmt"
 	"log"
 	"net/http"
-	"os"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-	_ "github.com/go-sql-driver/mysql"
 
+	"todo-backend/config"
 	"todo-backend/internal/handler"
 	"todo-backend/internal/repository"
 	"todo-backend/internal/service"
 )
 
 func main() {
-	dbHost := os.Getenv("DB_HOST")
-	dbPort := os.Getenv("DB_PORT")
-	dbUser := os.Getenv("DB_USER")
-	dbPassword := os.Getenv("DB_PASSWORD")
-	dbName := os.Getenv("DB_NAME")
 
-	//mysql連線
-	dsn := fmt.Sprintf(
-		"%s:%s@tcp(%s:%s)/%s?parseTime=true",
-		dbUser,
-		dbPassword,
-		dbHost,
-		dbPort,
-		dbName,
-	)
-
-	//建立db物件
-	db, err := sql.Open("mysql", dsn)
+	//載入設定
+	cfg, err := config.Load()
 	if err != nil {
-		log.Fatal("Failed to open database:", err)
+		log.Fatal("Failed to load config:", err)
 	}
-	defer db.Close()
 
-	//確認是否順利連上db
-	if err := db.Ping(); err != nil {
+	//建立gorm db
+	db, err := config.NewDatabase(cfg.Database)
+	if err != nil {
 		log.Fatal("Failed to connect to database:", err)
 	}
+
+	// 取得 GORM 底層 sql.DB
+	sqlDB, err := db.DB()
+	if err != nil {
+		log.Fatal("Failed to get database connection:", err)
+	}
+	defer sqlDB.Close()
 
 	log.Println("Database connected successfully")
 
@@ -69,7 +58,7 @@ func main() {
 			"PUT",
 			"PATCH",
 			"DELETE",
-			"OPTION",
+			"OPTIONS",
 		},
 		AllowHeaders: []string{
 			"Origin",
@@ -78,11 +67,12 @@ func main() {
 	}))
 
 	router.GET("/health", func(c *gin.Context) {
-		if err := db.Ping(); err != nil {
+		if err := sqlDB.Ping(); err != nil {
 			c.JSON(http.StatusServiceUnavailable, gin.H{
 				"status":   "error",
 				"database": "disconnected",
 			})
+			return
 		}
 
 		c.JSON(http.StatusOK, gin.H{
@@ -101,7 +91,7 @@ func main() {
 		api.DELETE("/todos/:id", todoHandler.DeleteTodo)
 	}
 
-	if err := router.Run(":8080"); err != nil {
+	if err := router.Run(":" + cfg.Server.Port); err != nil {
 		log.Fatal("Failed to start server:", err)
 	}
 

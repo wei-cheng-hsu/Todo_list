@@ -1,6 +1,11 @@
 package model
 
-import "time"
+import (
+	"time"
+
+	"github.com/google/uuid"
+	"gorm.io/gorm"
+)
 
 type TodoStatus string
 
@@ -11,25 +16,20 @@ const (
 )
 
 type Todo struct {
-	ID          uint64     `json:"id"`
-	Title       string     `json:"title"`
-	Description *string    `json:"description"`
-	DueDate     time.Time  `json:"due_date"`
-	SetupDate   time.Time  `json:"setup_date"`
-	Status      TodoStatus `json:"status"`
-	UpdatedAt   time.Time  `json:"updated_at"`
+	ID          uuid.UUID  `json:"id" gorm:"type:char(36);primaryKey"`
+	Title       string     `json:"title" gorm:"size:50;not null"`
+	Description *string    `json:"description" gorm:"size:1000"`
+	DueDate     time.Time  `json:"due_date" gorm:"type:date;not null"`
+	SetupDate   time.Time  `json:"setup_date" gorm:"<-:false"`
+	Status      TodoStatus `json:"status" gorm:"type:enum('undo','finish','delay');default:undo"`
+	UpdatedAt   time.Time  `json:"updated_at" gorm:"<-:false"`
 }
 
-// POST /api/todos 使用
-type CreateTodoRequest struct {
-	Title       string  `json:"title" binding:"required,max=50"`
-	Description *string `json:"description" binding:"omitempty,max=1000"`
-	DueDate     string  `json:"due_date" binding:"required"`
-}
+// 在新增 Todo 前自動產生 UUID
+func (t *Todo) BeforeCreate(tx *gorm.DB) error {
+	if t.ID == uuid.Nil {
+		t.ID = uuid.New()
+	}
 
-// PUT /api/todos/:id 使用
-type UpdateTodoRequest struct {
-	Title       string  `json:"title" binding:"required,max=50"`
-	Description *string `json:"description" binding:"omitempty,max=1000"`
-	DueDate     string  `json:"due_date" binding:"required"`
+	return nil
 }
